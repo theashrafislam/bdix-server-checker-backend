@@ -1,4 +1,5 @@
 const express = require("express");
+const cors = require("cors");
 
 const app = express();
 const PORT = 5000;
@@ -9,7 +10,6 @@ app.use(cors({
     allowedHeaders: ["Content-Type"]
 }));
 
-app.options("*", cors());
 
 // Middleware
 app.use(express.json());
