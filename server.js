@@ -3,6 +3,14 @@ const express = require("express");
 const app = express();
 const PORT = 5000;
 
+app.use(cors({
+    origin: "*",
+    methods: ["GET", "POST", "OPTIONS"],
+    allowedHeaders: ["Content-Type"]
+}));
+
+app.options("*", cors());
+
 // Middleware
 app.use(express.json());
 
