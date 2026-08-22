@@ -367,7 +367,7 @@ app.post("/api/check-servers", async (req, res) => {
 
                             signal:
                                 AbortSignal.timeout(
-                                    10000
+                                    20000
                                 )
                         }
                     );
