@@ -85,80 +85,12 @@ app.get("/", (req, res) => {
 //   }
 // });
 
-// Multiple Server Checker API
 app.post("/api/check-servers", async (req, res) => {
-
-    // ==================================================
-    // CORS
-    // ==================================================
-
-    res.setHeader(
-        "Access-Control-Allow-Origin",
-        "*"
-    );
-
-    res.setHeader(
-        "Access-Control-Allow-Methods",
-        "GET, POST, OPTIONS"
-    );
-
-    res.setHeader(
-        "Access-Control-Allow-Headers",
-        "Content-Type"
-    );
-
-
-    // ==================================================
-    // SSE / STREAM HEADERS
-    // ==================================================
-
-    res.setHeader(
-        "Content-Type",
-        "text/event-stream; charset=utf-8"
-    );
-
-    res.setHeader(
-        "Cache-Control",
-        "no-cache, no-transform"
-    );
-
-    res.setHeader(
-        "Connection",
-        "keep-alive"
-    );
-
-    res.setHeader(
-        "X-Accel-Buffering",
-        "no"
-    );
-
-
-    // ==================================================
-    // SEND EVENT FUNCTION
-    // ==================================================
-
-    const sendEvent = (data) => {
-
-        try {
-
-            res.write(
-                `data: ${JSON.stringify(data)}\n\n`
-            );
-
-        } catch (error) {
-
-            console.error(
-                "Stream write error:",
-                error.message
-            );
-        }
-    };
-
 
     try {
 
         // ==================================================
-        // REQUEST BODY
+        // GET SERVERS
         // ==================================================
 
         const { servers } = req.body;
@@ -168,63 +100,22 @@ app.post("/api/check-servers", async (req, res) => {
         // VALIDATE SERVERS
         // ==================================================
 
-        if (
-            !servers ||
-            !Array.isArray(servers)
-        ) {
+        if (!Array.isArray(servers)) {
 
-            sendEvent({
-                type: "error",
+            return res.status(400).json({
                 success: false,
-                message:
-                    "Please provide servers array"
+                message: "servers must be an array"
             });
-
-            return res.end();
         }
 
 
-        // ==================================================
-        // TOTAL
-        // ==================================================
+        if (servers.length === 0) {
 
-        const total =
-            servers.length;
-
-
-        let completed = 0;
-
-        let open = 0;
-
-        let failed = 0;
-
-
-        const results = [];
-
-
-        // ==================================================
-        // INITIAL EVENT
-        // ==================================================
-
-        sendEvent({
-
-            type: "start",
-
-            success: true,
-
-            total: total,
-
-            completed: 0,
-
-            open: 0,
-
-            failed: 0,
-
-            pending: total,
-
-            message:
-                "Server checking started"
-        });
+            return res.status(400).json({
+                success: false,
+                message: "Please provide at least one server"
+            });
+        }
 
 
         // ==================================================
@@ -233,26 +124,27 @@ app.post("/api/check-servers", async (req, res) => {
 
         const checkServer = async (server) => {
 
-            const {
-                name,
-                type,
-                url
-            } = server;
+            const name =
+                server?.name || "Unknown";
+
+            const type =
+                server?.type || "Unknown";
+
+            const url =
+                server?.url || null;
 
 
-            // ------------------------------------------------
+            // ==================================================
             // URL MISSING
-            // ------------------------------------------------
+            // ==================================================
 
             if (!url) {
 
                 return {
 
-                    name:
-                        name || "Unknown",
+                    name,
 
-                    type:
-                        type || "Unknown",
+                    type,
 
                     url: null,
 
@@ -264,35 +156,30 @@ app.post("/api/check-servers", async (req, res) => {
 
                     responseTime: 0,
 
-                    message:
-                        "URL is missing"
+                    message: "URL is missing"
                 };
             }
 
 
-            // ------------------------------------------------
+            // ==================================================
             // URL VALIDATION
-            // ------------------------------------------------
+            // ==================================================
 
             let targetUrl;
 
-
             try {
 
-                targetUrl =
-                    new URL(url);
+                targetUrl = new URL(url);
 
             } catch {
 
                 return {
 
-                    name:
-                        name || "Unknown",
+                    name,
 
-                    type:
-                        type || "Unknown",
+                    type,
 
-                    url: url,
+                    url,
 
                     accessible: false,
 
@@ -302,34 +189,27 @@ app.post("/api/check-servers", async (req, res) => {
 
                     responseTime: 0,
 
-                    message:
-                        "Invalid URL"
+                    message: "Invalid URL"
                 };
             }
 
 
-            // ------------------------------------------------
-            // PROTOCOL CHECK
-            // ------------------------------------------------
+            // ==================================================
+            // HTTP / HTTPS CHECK
+            // ==================================================
 
             if (
-                ![
-                    "http:",
-                    "https:"
-                ].includes(
-                    targetUrl.protocol
-                )
+                targetUrl.protocol !== "http:" &&
+                targetUrl.protocol !== "https:"
             ) {
 
                 return {
 
-                    name:
-                        name || "Unknown",
+                    name,
 
-                    type:
-                        type || "Unknown",
+                    type,
 
-                    url: url,
+                    url,
 
                     accessible: false,
 
@@ -345,53 +225,49 @@ app.post("/api/check-servers", async (req, res) => {
             }
 
 
-            // ------------------------------------------------
+            // ==================================================
             // START TIMER
-            // ------------------------------------------------
+            // ==================================================
 
-            const startTime =
-                Date.now();
+            const startTime = Date.now();
 
 
             try {
 
-                // ------------------------------------------------
+                // ==================================================
                 // REQUEST SERVER
-                // ------------------------------------------------
+                // ==================================================
 
-                const response =
-                    await fetch(
-                        targetUrl,
-                        {
-                            method: "GET",
+                const response = await fetch(
+                    targetUrl,
+                    {
+                        method: "GET",
 
-                            signal:
-                                AbortSignal.timeout(
-                                    20000
-                                )
-                        }
-                    );
+                        signal:
+                            AbortSignal.timeout(20000)
+                    }
+                );
 
 
-                // ------------------------------------------------
+                // ==================================================
                 // RESPONSE TIME
-                // ------------------------------------------------
+                // ==================================================
 
                 const responseTime =
-                    Date.now() -
-                    startTime;
+                    Date.now() - startTime;
 
+
+                // ==================================================
+                // SUCCESS
+                // ==================================================
 
                 return {
 
-                    name:
-                        name || "Unknown",
+                    name,
 
-                    type:
-                        type || "Unknown",
+                    type,
 
-                    url:
-                        targetUrl.href,
+                    url: targetUrl.href,
 
                     accessible: true,
 
@@ -400,8 +276,7 @@ app.post("/api/check-servers", async (req, res) => {
                     statusCode:
                         response.status,
 
-                    responseTime:
-                        responseTime,
+                    responseTime,
 
                     message:
                         "Server is accessible"
@@ -410,25 +285,21 @@ app.post("/api/check-servers", async (req, res) => {
 
             } catch (error) {
 
-                // ------------------------------------------------
-                // FAILED REQUEST
-                // ------------------------------------------------
+                // ==================================================
+                // FAILED
+                // ==================================================
 
                 const responseTime =
-                    Date.now() -
-                    startTime;
+                    Date.now() - startTime;
 
 
                 return {
 
-                    name:
-                        name || "Unknown",
+                    name,
 
-                    type:
-                        type || "Unknown",
+                    type,
 
-                    url:
-                        targetUrl.href,
+                    url: targetUrl.href,
 
                     accessible: false,
 
@@ -436,8 +307,7 @@ app.post("/api/check-servers", async (req, res) => {
 
                     statusCode: null,
 
-                    responseTime:
-                        responseTime,
+                    responseTime,
 
                     message:
                         "Server is not accessible",
@@ -450,178 +320,53 @@ app.post("/api/check-servers", async (req, res) => {
 
 
         // ==================================================
-        // CHECK SERVERS ONE BY ONE
+        // CHECK ALL SERVERS
         // ==================================================
 
-        for (
-            let i = 0;
-            i < servers.length;
-            i++
-        ) {
+        const results = [];
 
-            const server =
-                servers[i];
-
-
-            const current =
-                i + 1;
-
-
-            // ------------------------------------------------
-            // TELL FRONTEND WHICH SERVER IS CURRENTLY CHECKING
-            // ------------------------------------------------
-
-            sendEvent({
-
-                type: "checking",
-
-                current: current,
-
-                total: total,
-
-                completed: completed,
-
-                open: open,
-
-                failed: failed,
-
-                pending:
-                    total - completed,
-
-                name:
-                    server.name ||
-                    "Unknown",
-
-                serverType:
-                    server.type ||
-                    "Unknown",
-
-                url:
-                    server.url ||
-                    null,
-
-                progress:
-                    Math.round(
-                        (
-                            completed /
-                            total
-                        ) * 100
-                    ),
-
-                message:
-                    `Checking ${server.name ||
-                    "Unknown"
-                    }`
-            });
-
-
-            // ------------------------------------------------
-            // CHECK SERVER
-            // ------------------------------------------------
+        for (const server of servers) {
 
             const result =
-                await checkServer(
-                    server
-                );
+                await checkServer(server);
 
-
-            // ------------------------------------------------
-            // ADD RESULT
-            // ------------------------------------------------
-
-            results.push(
-                result
-            );
-
-
-            // ------------------------------------------------
-            // UPDATE COUNTERS
-            // ------------------------------------------------
-
-            completed++;
-
-
-            if (
-                result.accessible === true
-            ) {
-
-                open++;
-
-            } else {
-
-                failed++;
-            }
-
-
-            const pending =
-                total -
-                completed;
-
-
-            const progress =
-                Math.round(
-                    (
-                        completed /
-                        total
-                    ) * 100
-                );
-
-
-            // ------------------------------------------------
-            // SEND RESULT IMMEDIATELY
-            // ------------------------------------------------
-
-            sendEvent({
-
-                type: "result",
-
-                current: current,
-
-                total: total,
-
-                completed:
-                    completed,
-
-                open:
-                    open,
-
-                failed:
-                    failed,
-
-                pending:
-                    pending,
-
-                progress:
-                    progress,
-
-                result:
-                    result
-            });
-
+            results.push(result);
         }
 
 
         // ==================================================
-        // FINAL RESULT
+        // COUNT RESULTS
         // ==================================================
 
-        sendEvent({
+        const open =
+            results.filter(
+                server => server.accessible
+            ).length;
 
-            type: "complete",
+
+        const failed =
+            results.filter(
+                server => !server.accessible
+            ).length;
+
+
+        // ==================================================
+        // FINAL JSON RESPONSE
+        // ==================================================
+
+        return res.status(200).json({
 
             success: true,
 
             total:
-                total,
+                servers.length,
 
             completed:
-                completed,
+                results.length,
 
-            open:
-                open,
+            open,
 
-            failed:
-                failed,
+            failed,
 
             pending: 0,
 
@@ -635,13 +380,6 @@ app.post("/api/check-servers", async (req, res) => {
         });
 
 
-        // ==================================================
-        // END STREAM
-        // ==================================================
-
-        return res.end();
-
-
     } catch (error) {
 
         console.error(
@@ -650,13 +388,7 @@ app.post("/api/check-servers", async (req, res) => {
         );
 
 
-        // ------------------------------------------------
-        // SEND ERROR
-        // ------------------------------------------------
-
-        sendEvent({
-
-            type: "error",
+        return res.status(500).json({
 
             success: false,
 
@@ -666,12 +398,600 @@ app.post("/api/check-servers", async (req, res) => {
             error:
                 error.message
         });
-
-
-        return res.end();
     }
-
 });
+
+
+// Multiple Server Checker API
+// app.post("/api/check-servers", async (req, res) => {
+
+//     // ==================================================
+//     // CORS
+//     // ==================================================
+
+//     res.setHeader(
+//         "Access-Control-Allow-Origin",
+//         "*"
+//     );
+
+//     res.setHeader(
+//         "Access-Control-Allow-Methods",
+//         "GET, POST, OPTIONS"
+//     );
+
+//     res.setHeader(
+//         "Access-Control-Allow-Headers",
+//         "Content-Type"
+//     );
+
+
+//     // ==================================================
+//     // SSE / STREAM HEADERS
+//     // ==================================================
+
+//     res.setHeader(
+//         "Content-Type",
+//         "text/event-stream; charset=utf-8"
+//     );
+
+//     res.setHeader(
+//         "Cache-Control",
+//         "no-cache, no-transform"
+//     );
+
+//     res.setHeader(
+//         "Connection",
+//         "keep-alive"
+//     );
+
+//     res.setHeader(
+//         "X-Accel-Buffering",
+//         "no"
+//     );
+
+
+//     // IMPORTANT: HEADERS IMMEDIATELY SEND
+//     res.flushHeaders();
+
+//     // ==================================================
+//     // SEND EVENT FUNCTION
+//     // ==================================================
+
+//     const sendEvent = (data) => {
+
+//         try {
+
+//             res.write(
+//                 `data: ${JSON.stringify(data)}\n\n`
+//             );
+
+//         } catch (error) {
+
+//             console.error(
+//                 "Stream write error:",
+//                 error.message
+//             );
+//         }
+//     };
+
+
+//     try {
+
+//         // ==================================================
+//         // REQUEST BODY
+//         // ==================================================
+
+//         const { servers } = req.body;
+
+
+//         // ==================================================
+//         // VALIDATE SERVERS
+//         // ==================================================
+
+//         if (
+//             !servers ||
+//             !Array.isArray(servers)
+//         ) {
+
+//             sendEvent({
+//                 type: "error",
+//                 success: false,
+//                 message:
+//                     "Please provide servers array"
+//             });
+
+//             return res.end();
+//         }
+
+
+//         // ==================================================
+//         // TOTAL
+//         // ==================================================
+
+//         const total =
+//             servers.length;
+
+
+//         let completed = 0;
+
+//         let open = 0;
+
+//         let failed = 0;
+
+
+//         const results = [];
+
+
+//         // ==================================================
+//         // INITIAL EVENT
+//         // ==================================================
+
+//         sendEvent({
+
+//             type: "start",
+
+//             success: true,
+
+//             total: total,
+
+//             completed: 0,
+
+//             open: 0,
+
+//             failed: 0,
+
+//             pending: total,
+
+//             message:
+//                 "Server checking started"
+//         });
+
+
+//         // ==================================================
+//         // CHECK SERVER FUNCTION
+//         // ==================================================
+
+//         const checkServer = async (server) => {
+
+//             const {
+//                 name,
+//                 type,
+//                 url
+//             } = server;
+
+
+//             // ------------------------------------------------
+//             // URL MISSING
+//             // ------------------------------------------------
+
+//             if (!url) {
+
+//                 return {
+
+//                     name:
+//                         name || "Unknown",
+
+//                     type:
+//                         type || "Unknown",
+
+//                     url: null,
+
+//                     accessible: false,
+
+//                     status: "failed",
+
+//                     statusCode: null,
+
+//                     responseTime: 0,
+
+//                     message:
+//                         "URL is missing"
+//                 };
+//             }
+
+
+//             // ------------------------------------------------
+//             // URL VALIDATION
+//             // ------------------------------------------------
+
+//             let targetUrl;
+
+
+//             try {
+
+//                 targetUrl =
+//                     new URL(url);
+
+//             } catch {
+
+//                 return {
+
+//                     name:
+//                         name || "Unknown",
+
+//                     type:
+//                         type || "Unknown",
+
+//                     url: url,
+
+//                     accessible: false,
+
+//                     status: "failed",
+
+//                     statusCode: null,
+
+//                     responseTime: 0,
+
+//                     message:
+//                         "Invalid URL"
+//                 };
+//             }
+
+
+//             // ------------------------------------------------
+//             // PROTOCOL CHECK
+//             // ------------------------------------------------
+
+//             if (
+//                 ![
+//                     "http:",
+//                     "https:"
+//                 ].includes(
+//                     targetUrl.protocol
+//                 )
+//             ) {
+
+//                 return {
+
+//                     name:
+//                         name || "Unknown",
+
+//                     type:
+//                         type || "Unknown",
+
+//                     url: url,
+
+//                     accessible: false,
+
+//                     status: "failed",
+
+//                     statusCode: null,
+
+//                     responseTime: 0,
+
+//                     message:
+//                         "Only HTTP and HTTPS URLs are supported"
+//                 };
+//             }
+
+
+//             // ------------------------------------------------
+//             // START TIMER
+//             // ------------------------------------------------
+
+//             const startTime =
+//                 Date.now();
+
+
+//             try {
+
+//                 // ------------------------------------------------
+//                 // REQUEST SERVER
+//                 // ------------------------------------------------
+
+//                 const response =
+//                     await fetch(
+//                         targetUrl,
+//                         {
+//                             method: "GET",
+
+//                             signal:
+//                                 AbortSignal.timeout(
+//                                     20000
+//                                 )
+//                         }
+//                     );
+
+
+//                 // ------------------------------------------------
+//                 // RESPONSE TIME
+//                 // ------------------------------------------------
+
+//                 const responseTime =
+//                     Date.now() -
+//                     startTime;
+
+
+//                 return {
+
+//                     name:
+//                         name || "Unknown",
+
+//                     type:
+//                         type || "Unknown",
+
+//                     url:
+//                         targetUrl.href,
+
+//                     accessible: true,
+
+//                     status: "open",
+
+//                     statusCode:
+//                         response.status,
+
+//                     responseTime:
+//                         responseTime,
+
+//                     message:
+//                         "Server is accessible"
+//                 };
+
+
+//             } catch (error) {
+
+//                 // ------------------------------------------------
+//                 // FAILED REQUEST
+//                 // ------------------------------------------------
+
+//                 const responseTime =
+//                     Date.now() -
+//                     startTime;
+
+
+//                 return {
+
+//                     name:
+//                         name || "Unknown",
+
+//                     type:
+//                         type || "Unknown",
+
+//                     url:
+//                         targetUrl.href,
+
+//                     accessible: false,
+
+//                     status: "failed",
+
+//                     statusCode: null,
+
+//                     responseTime:
+//                         responseTime,
+
+//                     message:
+//                         "Server is not accessible",
+
+//                     error:
+//                         error.message
+//                 };
+//             }
+//         };
+
+
+//         // ==================================================
+//         // CHECK SERVERS ONE BY ONE
+//         // ==================================================
+
+//         for (
+//             let i = 0;
+//             i < servers.length;
+//             i++
+//         ) {
+
+//             const server =
+//                 servers[i];
+
+
+//             const current =
+//                 i + 1;
+
+
+//             // ------------------------------------------------
+//             // TELL FRONTEND WHICH SERVER IS CURRENTLY CHECKING
+//             // ------------------------------------------------
+
+//             sendEvent({
+
+//                 type: "checking",
+
+//                 current: current,
+
+//                 total: total,
+
+//                 completed: completed,
+
+//                 open: open,
+
+//                 failed: failed,
+
+//                 pending:
+//                     total - completed,
+
+//                 name:
+//                     server.name ||
+//                     "Unknown",
+
+//                 serverType:
+//                     server.type ||
+//                     "Unknown",
+
+//                 url:
+//                     server.url ||
+//                     null,
+
+//                 progress:
+//                     Math.round(
+//                         (
+//                             completed /
+//                             total
+//                         ) * 100
+//                     ),
+
+//                 message:
+//                     `Checking ${server.name ||
+//                     "Unknown"
+//                     }`
+//             });
+
+
+//             // ------------------------------------------------
+//             // CHECK SERVER
+//             // ------------------------------------------------
+
+//             const result =
+//                 await checkServer(
+//                     server
+//                 );
+
+
+//             // ------------------------------------------------
+//             // ADD RESULT
+//             // ------------------------------------------------
+
+//             results.push(
+//                 result
+//             );
+
+
+//             // ------------------------------------------------
+//             // UPDATE COUNTERS
+//             // ------------------------------------------------
+
+//             completed++;
+
+
+//             if (
+//                 result.accessible === true
+//             ) {
+
+//                 open++;
+
+//             } else {
+
+//                 failed++;
+//             }
+
+
+//             const pending =
+//                 total -
+//                 completed;
+
+
+//             const progress =
+//                 Math.round(
+//                     (
+//                         completed /
+//                         total
+//                     ) * 100
+//                 );
+
+
+//             // ------------------------------------------------
+//             // SEND RESULT IMMEDIATELY
+//             // ------------------------------------------------
+
+//             sendEvent({
+
+//                 type: "result",
+
+//                 current: current,
+
+//                 total: total,
+
+//                 completed:
+//                     completed,
+
+//                 open:
+//                     open,
+
+//                 failed:
+//                     failed,
+
+//                 pending:
+//                     pending,
+
+//                 progress:
+//                     progress,
+
+//                 result:
+//                     result
+//             });
+
+//         }
+
+
+//         // ==================================================
+//         // FINAL RESULT
+//         // ==================================================
+
+//         sendEvent({
+
+//             type: "complete",
+
+//             success: true,
+
+//             total:
+//                 total,
+
+//             completed:
+//                 completed,
+
+//             open:
+//                 open,
+
+//             failed:
+//                 failed,
+
+//             pending: 0,
+
+//             progress: 100,
+
+//             servers:
+//                 results,
+
+//             message:
+//                 "Server checking completed"
+//         });
+
+
+//         // ==================================================
+//         // END STREAM
+//         // ==================================================
+
+//         return res.end();
+
+
+//     } catch (error) {
+
+//         console.error(
+//             "Server checking error:",
+//             error
+//         );
+
+
+//         // ------------------------------------------------
+//         // SEND ERROR
+//         // ------------------------------------------------
+
+//         sendEvent({
+
+//             type: "error",
+
+//             success: false,
+
+//             message:
+//                 "Something went wrong",
+
+//             error:
+//                 error.message
+//         });
+
+
+//         return res.end();
+//     }
+
+// });
 
 // Health Check Route
 app.get("/health", (req, res) => {
